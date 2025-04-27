@@ -1,0 +1,130 @@
+<?php
+require_once 'config/db.php';
+require_once 'includes/header.php';
+
+// Initialize variables
+$searchTerm = '';
+$records = [];
+
+// Process search if form was submitted
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['search'])) {
+    $searchTerm = trim($_GET['search']);
+    
+    if (!empty($searchTerm)) {
+        $query = "SELECT id, name, tag_number, graveyard, dod, grave_class, 
+                 receipt_number, burial_order_number, exemption, reason, 
+                 ST_X(geom) as longitude, ST_Y(geom) as latitude 
+                 FROM burial_records 
+                 WHERE name ILIKE :search OR tag_number ILIKE :search
+                 ORDER BY name ASC";
+        
+        $stmt = $db->prepare($query);
+        $stmt->bindValue(':search', "%$searchTerm%");
+        $stmt->execute();
+        $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} else {
+    // Default view - show all records
+    $query = "SELECT id, name, tag_number, graveyard, dod, grave_class, 
+              receipt_number, burial_order_number, exemption, reason, 
+              ST_X(geom) as longitude, ST_Y(geom) as latitude 
+              FROM burial_records 
+              ORDER BY dod DESC 
+              LIMIT 50";
+    $records = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
+}
+?>
+
+<div class="page-header">
+    <h2>Burial Records Management</h2>
+    <a href="create.php" class="btn btn-primary">
+        <i class="fas fa-plus"></i> Add New Record
+    </a>
+</div>
+
+<div class="search-container">
+    <form method="get" class="search-form">
+        <div class="search-input-group">
+            <input type="text" name="search" placeholder="Search by name or tag number..." 
+                   value="<?= htmlspecialchars($searchTerm) ?>" class="search-input">
+            <button type="submit" class="search-button">
+                <i class="fas fa-search"></i> Search
+            </button>
+            <?php if (!empty($searchTerm)): ?>
+                <a href="index.php" class="clear-search">Clear search</a>
+            <?php endif; ?>
+        </div>
+    </form>
+</div>
+
+<?php if (isset($_GET['success'])): ?>
+    <div class="alert alert-success">
+        <i class="fas fa-check-circle"></i> <?= htmlspecialchars($_GET['success']) ?>
+    </div>
+<?php endif; ?>
+
+<div class="card">
+    <div class="card-header">
+        <h3><?= empty($searchTerm) ? 'Recent Records' : 'Search Results' ?></h3>
+        <div class="record-count"><?= count($records) ?> records found</div>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="records-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Tag Number</th>
+                    <th>Graveyard</th>
+                    <th>Date of Death</th>
+                    <th>Location</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (count($records) > 0): ?>
+                    <?php foreach ($records as $record): ?>
+                    <tr>
+                        <td>
+                            <div class="name-cell">
+                                <strong><?= htmlspecialchars($record['name']) ?></strong>
+                                <?php if ($record['exemption']): ?>
+                                    <span class="badge badge-exemption">Exemption</span>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                        <td><?= htmlspecialchars($record['tag_number']) ?></td>
+                        <td><?= htmlspecialchars($record['graveyard']) ?></td>
+                        <td>
+                            <?= $record['dod'] ? date('M d, Y', strtotime($record['dod'])) : 'N/A' ?>
+                        </td>
+                        <td>
+                            <?php if ($record['longitude'] && $record['latitude']): ?>
+                                <a href="https://www.google.com/maps?q=<?= $record['latitude'] ?>,<?= $record['longitude'] ?>" 
+                                   target="_blank" class="map-link">
+                                    <i class="fas fa-map-marker-alt"></i> View Map
+                                </a>
+                            <?php else: ?>
+                                <span class="text-muted">N/A</span>
+                            <?php endif; ?>
+                        </td>
+                        <td class="actions">
+                            <a href="create.php?id=<?= $record['id'] ?>" class="btn btn-sm btn-edit">
+                                <i class="fas fa-edit"></i> Edit
+                            </a>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="6" class="no-records">
+                            <i class="fas fa-info-circle"></i> No records found matching your search criteria
+                        </td>
+                    </tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<?php require_once 'includes/footer.php'; ?>
